@@ -1,0 +1,38 @@
+{
+  "driver_id": "madvr",
+  "version": "1.0.0",
+  "min_core_api": "0.21.0",
+  "name": {
+    "en": "madVR Envy"
+  },
+  "description": {
+    "en": "Remote control integration for madVR Envy video processor with complete IP control support"
+  },
+  "developer": {
+    "name": "Meir Miyara",
+    "email": "meir.miyara@gmail.com"
+  },
+  "home_page": "https://github.com/mase1981/uc-intg-madvr",
+  "icon": "uc:input-numeric",
+  "setup_data_schema": {
+    "title": {
+      "en": "madVR Envy Setup"
+    },
+    "settings": [
+      {
+        "id": "info",
+        "label": {
+          "en": "Setup Information"
+        },
+        "field": {
+          "label": {
+            "value": {
+              "en": "This integration provides complete remote control for madVR Envy video processors via IP control. You will be asked to provide the device's IP address and port on the next screen."
+            }
+          }
+        }
+      }
+    ]
+  },
+  "release_date": "2025-01-13"
+}
