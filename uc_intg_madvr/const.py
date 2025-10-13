@@ -1,0 +1,98 @@
+"""
+Constants for madVR Envy integration.
+
+:copyright: (c) 2025 by Meir Miyara
+:license: MPL-2.0, see LICENSE for more details.
+"""
+
+DEFAULT_PORT = 44077
+CONNECTION_TIMEOUT = 10.0
+COMMAND_TIMEOUT = 5.0
+HEARTBEAT_INTERVAL = 20.0
+
+POLL_INTERVAL = 10.0
+
+COMMAND_DELAY = 0.5
+POWER_COMMAND_DELAY = 2.0
+
+CMD_POWER_OFF = "PowerOff"
+CMD_STANDBY = "Standby"
+CMD_RESTART = "Restart"
+CMD_RELOAD_SOFTWARE = "ReloadSoftware"
+CMD_HEARTBEAT = "Heartbeat"
+
+CMD_OPEN_MENU = "OpenMenu"
+CMD_CLOSE_MENU = "CloseMenu"
+
+MENU_INFO = "Info"
+MENU_SETTINGS = "Settings"
+MENU_CONFIGURATION = "Configuration"
+MENU_PROFILES = "Profiles"
+MENU_TEST_PATTERNS = "TestPatterns"
+
+CMD_KEY_PRESS = "KeyPress"
+CMD_KEY_HOLD = "KeyHold"
+
+KEY_UP = "UP"
+KEY_DOWN = "DOWN"
+KEY_LEFT = "LEFT"
+KEY_RIGHT = "RIGHT"
+KEY_OK = "OK"
+KEY_BACK = "BACK"
+KEY_MENU = "MENU"
+KEY_POWER = "POWER"
+KEY_INFO = "INFO"
+KEY_SETTINGS = "SETTINGS"
+KEY_INPUT = "INPUT"
+
+KEY_RED = "RED"
+KEY_GREEN = "GREEN"
+KEY_BLUE = "BLUE"
+KEY_YELLOW = "YELLOW"
+KEY_MAGENTA = "MAGENTA"
+KEY_CYAN = "CYAN"
+
+CMD_SET_ASPECT_RATIO_MODE = "SetAspectRatioMode"
+
+AR_AUTO = "Auto"
+AR_HOLD = "Hold"
+AR_4_3 = "4:3"
+AR_16_9 = "16:9"
+AR_1_85 = "1.85:1"
+AR_2_00 = "2.00:1"
+AR_2_20 = "2.20:1"
+AR_2_35 = "2.35:1"
+AR_2_40 = "2.40:1"
+AR_2_55 = "2.55:1"
+AR_2_76 = "2.76:1"
+
+CMD_GET_SIGNAL_INFO = "GetIncomingSignalInfo"
+CMD_GET_ASPECT_RATIO = "GetAspectRatio"
+CMD_GET_MASKING_RATIO = "GetMaskingRatio"
+CMD_GET_TEMPERATURES = "GetTemperatures"
+CMD_GET_MAC_ADDRESS = "GetMacAddress"
+
+CMD_TOGGLE = "Toggle"
+TOGGLE_TONE_MAP = "ToneMap"
+TOGGLE_HIGHLIGHT_RECOVERY = "HighlightRecovery"
+TOGGLE_SHADOW_RECOVERY = "ShadowRecovery"
+TOGGLE_CONTRAST_RECOVERY = "ContrastRecovery"
+TOGGLE_3DLUT = "3DLUT"
+TOGGLE_SCREEN_BOUNDARIES = "ScreenBoundaries"
+TOGGLE_HISTOGRAM = "Histogram"
+TOGGLE_DEBUG_OSD = "DebugOSD"
+
+CMD_TONE_MAP_ON = "ToneMapOn"
+CMD_TONE_MAP_OFF = "ToneMapOff"
+
+CMD_DISPLAY_MESSAGE = "DisplayMessage"
+CMD_DISPLAY_ALERT = "DisplayAlertWindow"
+CMD_CLOSE_ALERT = "CloseAlertWindow"
+
+CMD_FORCE_1080P60 = "Force1080p60Output"
+CMD_HOTPLUG = "Hotplug"
+CMD_REFRESH_LICENSE = "RefreshLicenseInfo"
+
+RESPONSE_OK = "OK"
+RESPONSE_ERROR = "ERROR"
+NO_SIGNAL = "NoSignal"
