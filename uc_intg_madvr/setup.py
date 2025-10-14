@@ -6,6 +6,7 @@ Setup flow handler for madVR Envy integration.
 """
 
 import logging
+import asyncio
 from typing import Callable, Awaitable
 
 from ucapi import IntegrationSetupError, SetupAction, SetupComplete, SetupDriver
@@ -34,12 +35,7 @@ class MadVRSetup:
         _LOG.info("MadVRSetup initialized")
 
     async def handle_setup(self, msg: SetupDriver) -> SetupAction:
-        """
-        Handle setup flow messages.
-        
-        :param msg: Setup message
-        :return: Setup action response
-        """
+        """Handle setup flow messages."""
         _LOG.info("=" * 70)
         _LOG.info("SETUP: Received message type: %s", type(msg).__name__)
         _LOG.info("=" * 70)
@@ -112,7 +108,6 @@ class MadVRSetup:
         test_config = MadVRConfig()
         test_config.set_config(host, port, name)
         
-        import asyncio
         loop = asyncio.get_running_loop()
         test_device = MadVRDevice(test_config, loop)
         
@@ -123,13 +118,23 @@ class MadVRSetup:
                 _LOG.error("SETUP: Failed to connect to madVR device")
                 return SetupError(IntegrationSetupError.CONNECTION_REFUSED)
             
-            _LOG.info("SETUP: ✓ Successfully connected to madVR device")
+            _LOG.info("SETUP: Successfully connected to madVR device")
+            
+            _LOG.info("SETUP: Fetching MAC address for Wake-on-LAN...")
+            await test_device._fetch_mac_address()
+            
+            if test_config.mac_address:
+                _LOG.info("SETUP: MAC address retrieved: %s", test_config.mac_address)
+            else:
+                _LOG.warning("SETUP: Could not fetch MAC address, WOL may not work")
             
             await test_device.stop_polling()
             
             self._config.set_config(host, port, name)
+            if test_config.mac_address:
+                self._config.set_mac_address(test_config.mac_address)
             
-            _LOG.info("SETUP: ✓ Configuration saved successfully")
+            _LOG.info("SETUP: Configuration saved successfully")
             _LOG.info("=" * 70)
             return SetupComplete()
             
