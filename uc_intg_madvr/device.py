@@ -137,7 +137,7 @@ class MadVRDevice:
                 old_state = self._state
                 self._state = new_state
                 
-                _LOG.info(f"[{self.name}] State: {old_state} → {new_state}, Signal: {self._signal_info}")
+                _LOG.info(f"[{self.name}] State: {old_state} -> {new_state}, Signal: {self._signal_info}")
                 
                 self.events.emit(EVENTS.UPDATE, self.identifier, {
                     "state": self._state,
@@ -274,7 +274,7 @@ class MadVRDevice:
                     if len(parts) >= 2:
                         mac_address = parts[1]
                         self._config.set_mac_address(mac_address)
-                        _LOG.info(f"[{self.name}] âœ" MAC address stored: {mac_address}")
+                        _LOG.info(f"[{self.name}] MAC address stored: {mac_address}")
                     else:
                         _LOG.error(f"[{self.name}] MAC address response malformed: {mac_line}")
                 else:
@@ -290,7 +290,7 @@ class MadVRDevice:
         _LOG.info(f"[{self.name}] Wake-on-LAN triggered, MAC address: {mac_address}")
         
         if not mac_address:
-            _LOG.error(f"[{self.name}] âœ— No MAC address available for WOL")
+            _LOG.error(f"[{self.name}] No MAC address available for WOL")
             return {"success": False, "error": "No MAC address"}
 
         try:
@@ -304,7 +304,7 @@ class MadVRDevice:
             sock.sendto(magic_packet, ('<broadcast>', 9))
             sock.close()
 
-            _LOG.info(f"[{self.name}] âœ" Wake-on-LAN packet sent to {mac_address}")
+            _LOG.info(f"[{self.name}] Wake-on-LAN packet sent to {mac_address}")
             _LOG.info(f"[{self.name}] Waiting 3 seconds for device to wake...")
             
             await asyncio.sleep(3)
@@ -313,5 +313,5 @@ class MadVRDevice:
             return {"success": True}
 
         except Exception as e:
-            _LOG.error(f"[{self.name}] âœ— Wake-on-LAN failed: {e}", exc_info=True)
+            _LOG.error(f"[{self.name}] Wake-on-LAN failed: {e}", exc_info=True)
             return {"success": False, "error": str(e)}
