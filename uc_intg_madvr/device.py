@@ -72,7 +72,9 @@ class MadVRDevice:
         self._is_polling = True
         
         if not self._config.mac_address:
-            await self._fetch_mac_address()
+            _LOG.info(f"[{self.name}] No MAC address in config, will fetch when device is online")
+        else:
+            _LOG.info(f"[{self.name}] MAC address loaded from config: {self._config.mac_address}")
         
         self._loop.create_task(self._poll_loop())
         _LOG.info(f"[{self.name}] Started polling")
@@ -104,6 +106,10 @@ class MadVRDevice:
             )
             
             if heartbeat_result["success"]:
+                if not self._config.mac_address:
+                    _LOG.info(f"[{self.name}] Device online but no MAC address stored, fetching now...")
+                    await self._fetch_mac_address()
+                
                 signal_result = await self._send_command(
                     const.CMD_GET_SIGNAL_INFO, 
                     timeout=const.COMMAND_TIMEOUT
@@ -266,7 +272,7 @@ class MadVRDevice:
                             if len(parts) >= 2:
                                 mac_address = parts[1]
                                 self._config.set_mac_address(mac_address)
-                                _LOG.info(f"[{self.name}] MAC address stored: {mac_address}")
+                                _LOG.info(f"[{self.name}] MAC address stored in config: {mac_address}")
                                 return
                 
                 _LOG.error(f"[{self.name}] Could not parse MAC address from response")
@@ -281,7 +287,7 @@ class MadVRDevice:
         
         if not mac_address:
             _LOG.error(f"[{self.name}] No MAC address available for WOL")
-            return {"success": False, "error": "No MAC address"}
+            return {"success": False, "error": "No MAC address configured"}
 
         try:
             mac_with_colons = mac_address.replace("-", ":")
@@ -295,7 +301,7 @@ class MadVRDevice:
             sock.sendto(magic_packet, ('<broadcast>', 9))
             sock.close()
 
-            _LOG.info(f"[{self.name}] WOL packet sent, waiting 3 seconds...")
+            _LOG.info(f"[{self.name}] WOL packet sent to {mac_with_colons}, waiting 3 seconds...")
             await asyncio.sleep(3)
             
             return {"success": True}
