@@ -7,6 +7,7 @@ madVR Envy device handler with polling and event management.
 
 import asyncio
 import logging
+import socket
 from enum import IntEnum, StrEnum
 from asyncio import AbstractEventLoop
 from pyee.asyncio import AsyncIOEventEmitter
@@ -69,6 +70,10 @@ class MadVRDevice:
         if self._is_polling:
             return
         self._is_polling = True
+        
+        if not self._config.mac_address:
+            await self._fetch_mac_address()
+        
         self._loop.create_task(self._poll_loop())
         _LOG.info(f"[{self.name}] Started polling")
 
@@ -91,14 +96,7 @@ class MadVRDevice:
                 await asyncio.sleep(const.POLL_INTERVAL)
 
     async def update(self):
-        """
-        Update device state and emit events if changed.
-        
-        Power State Logic:
-        - Heartbeat succeeds + Signal detected = ON
-        - Heartbeat succeeds + No signal = STANDBY
-        - Heartbeat fails = OFF (or network issue)
-        """
+        """Update device state and emit events if changed."""
         try:
             heartbeat_result = await self._send_command(
                 const.CMD_HEARTBEAT, 
@@ -154,14 +152,12 @@ class MadVRDevice:
 
     async def send_command(self, command: str) -> dict:
         """Send command to device (public interface)."""
+        if command == const.CMD_STANDBY and self._state == PowerState.OFF:
+            return await self._wake_on_lan()
         return await self._send_command(command)
 
     async def _send_command(self, command: str, timeout: float = None) -> dict:
-        """
-        Send command to madVR device with automatic reconnection.
-        
-        Returns dict with 'success' bool and optional 'data' or 'error'.
-        """
+        """Send command to madVR device with automatic reconnection."""
         if timeout is None:
             timeout = const.COMMAND_TIMEOUT
             
@@ -243,3 +239,42 @@ class MadVRDevice:
             finally:
                 self._writer = None
                 self._reader = None
+
+    async def _fetch_mac_address(self):
+        """Fetch and store device MAC address."""
+        try:
+            result = await self._send_command(const.CMD_GET_MAC_ADDRESS)
+            if result["success"] and result.get("data"):
+                mac_line = result["data"]
+                if mac_line.startswith("MacAddress"):
+                    mac_address = mac_line.split()[1]
+                    self._config.set_mac_address(mac_address)
+                    _LOG.info(f"[{self.name}] MAC address stored: {mac_address}")
+        except Exception as e:
+            _LOG.error(f"[{self.name}] Failed to fetch MAC address: {e}")
+
+    async def _wake_on_lan(self) -> dict:
+        """Send Wake-on-LAN magic packet."""
+        mac_address = self._config.mac_address
+        if not mac_address:
+            _LOG.error(f"[{self.name}] No MAC address available for WOL")
+            return {"success": False, "error": "No MAC address"}
+
+        try:
+            mac_bytes = bytes.fromhex(mac_address.replace("-", "").replace(":", ""))
+            magic_packet = b'\xff' * 6 + mac_bytes * 16
+
+            sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+            sock.sendto(magic_packet, ('<broadcast>', 9))
+            sock.close()
+
+            _LOG.info(f"[{self.name}] Wake-on-LAN packet sent to {mac_address}")
+            
+            await asyncio.sleep(3)
+            
+            return {"success": True}
+
+        except Exception as e:
+            _LOG.error(f"[{self.name}] Wake-on-LAN failed: {e}")
+            return {"success": False, "error": str(e)}

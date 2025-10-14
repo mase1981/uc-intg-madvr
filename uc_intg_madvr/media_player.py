@@ -13,16 +13,13 @@ from ucapi.media_player import Attributes, Commands, DeviceClasses, Features, Me
 
 from uc_intg_madvr.config import MadVRConfig
 from uc_intg_madvr.device import MadVRDevice
+from uc_intg_madvr import const
 
 _LOG = logging.getLogger(__name__)
 
 
 class MadVRMediaPlayer(MediaPlayer):
-    """
-    Media Player entity for madVR device status display ONLY.
-    
-    Uses RECEIVER device class to suppress shuffle/repeat/source controls.
-    """
+    """Media Player entity for madVR device status display ONLY."""
 
     def __init__(self, config: MadVRConfig, device: MadVRDevice):
         self._config = config
@@ -53,20 +50,16 @@ class MadVRMediaPlayer(MediaPlayer):
     async def command_handler(
         self, entity: MediaPlayer, cmd_id: str, params: dict[str, Any] | None
     ) -> StatusCodes:
-        """
-        Handle media player commands.
-        
-        Returns OK for all commands to suppress errors, but only acts on ON/OFF.
-        """
+        """Handle media player commands."""
         _LOG.info(f"Media player command: {cmd_id}")
 
         try:
             if cmd_id == Commands.ON:
-                result = await self._device.send_command("Standby")
+                result = await self._device.send_command(const.CMD_STANDBY)
                 return StatusCodes.OK if result["success"] else StatusCodes.SERVER_ERROR
             
             elif cmd_id == Commands.OFF:
-                result = await self._device.send_command("PowerOff")
+                result = await self._device.send_command(const.CMD_POWER_OFF)
                 return StatusCodes.OK if result["success"] else StatusCodes.SERVER_ERROR
             
             else:

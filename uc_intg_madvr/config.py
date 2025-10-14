@@ -71,7 +71,8 @@ class MadVRConfig:
         self._config = {
             "host": host,
             "port": port,
-            "name": name
+            "name": name,
+            "mac_address": self._config.get("mac_address")
         }
         self._save_config()
         _LOG.info("Configuration updated: %s:%d", host, port)
@@ -90,6 +91,16 @@ class MadVRConfig:
     def name(self) -> str:
         """Get device name."""
         return self._config.get("name", "madVR Envy")
+
+    @property
+    def mac_address(self) -> str | None:
+        """Get stored MAC address."""
+        return self._config.get("mac_address")
+
+    def set_mac_address(self, mac_address: str) -> None:
+        """Store MAC address."""
+        self._config["mac_address"] = mac_address
+        self._save_config()
 
     def clear(self) -> None:
         """Clear configuration."""
