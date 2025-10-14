@@ -71,12 +71,8 @@ class MadVRDevice:
             return
         self._is_polling = True
         
-        _LOG.info(f"[{self.name}] Checking MAC address...")
         if not self._config.mac_address:
-            _LOG.info(f"[{self.name}] No MAC address in config, will fetch")
             await self._fetch_mac_address()
-        else:
-            _LOG.info(f"[{self.name}] MAC address already stored: {self._config.mac_address}")
         
         self._loop.create_task(self._poll_loop())
         _LOG.info(f"[{self.name}] Started polling")
@@ -156,23 +152,15 @@ class MadVRDevice:
 
     async def send_command(self, command: str) -> dict:
         """Send command to device (public interface with WOL support)."""
-        _LOG.info(f"[{self.name}] send_command called: command='{command}', current_state={self._state}")
+        if command == const.CMD_STANDBY and self._state == PowerState.OFF:
+            _LOG.info(f"[{self.name}] Device is OFF, triggering Wake-on-LAN before Standby")
+            wol_result = await self._wake_on_lan()
+            if not wol_result["success"]:
+                _LOG.error(f"[{self.name}] Wake-on-LAN failed: {wol_result.get('error')}")
+                return wol_result
+            _LOG.info(f"[{self.name}] Wake-on-LAN completed")
         
-        if command == const.CMD_STANDBY:
-            _LOG.info(f"[{self.name}] Standby command detected, checking if WOL needed (state={self._state})")
-            if self._state == PowerState.OFF:
-                _LOG.info(f"[{self.name}] Device is OFF, triggering Wake-on-LAN")
-                wol_result = await self._wake_on_lan()
-                if not wol_result["success"]:
-                    _LOG.error(f"[{self.name}] Wake-on-LAN failed: {wol_result.get('error')}")
-                    return wol_result
-                _LOG.info(f"[{self.name}] Wake-on-LAN completed, now sending Standby command")
-            else:
-                _LOG.info(f"[{self.name}] Device not OFF (state={self._state}), sending Standby directly")
-        
-        result = await self._send_command(command)
-        _LOG.info(f"[{self.name}] send_command result: {result}")
-        return result
+        return await self._send_command(command)
 
     async def _send_command(self, command: str, timeout: float = None) -> dict:
         """Send command to madVR device with automatic reconnection."""
@@ -266,19 +254,22 @@ class MadVRDevice:
             _LOG.info(f"[{self.name}] MAC address query result: {result}")
             
             if result["success"] and result.get("data"):
-                mac_line = result["data"]
-                _LOG.info(f"[{self.name}] MAC address response: {mac_line}")
+                response_data = result["data"]
+                _LOG.debug(f"[{self.name}] MAC address raw response: {response_data}")
                 
-                if mac_line.startswith("MacAddress"):
-                    parts = mac_line.split()
-                    if len(parts) >= 2:
-                        mac_address = parts[1]
-                        self._config.set_mac_address(mac_address)
-                        _LOG.info(f"[{self.name}] MAC address stored: {mac_address}")
-                    else:
-                        _LOG.error(f"[{self.name}] MAC address response malformed: {mac_line}")
-                else:
-                    _LOG.error(f"[{self.name}] Unexpected MAC address response format: {mac_line}")
+                if "MacAddress" in response_data:
+                    lines = response_data.split('\n')
+                    for line in lines:
+                        line = line.strip()
+                        if line.startswith("MacAddress"):
+                            parts = line.split()
+                            if len(parts) >= 2:
+                                mac_address = parts[1]
+                                self._config.set_mac_address(mac_address)
+                                _LOG.info(f"[{self.name}] MAC address stored: {mac_address}")
+                                return
+                
+                _LOG.error(f"[{self.name}] Could not parse MAC address from response")
             else:
                 _LOG.error(f"[{self.name}] Failed to get MAC address: {result.get('error')}")
         except Exception as e:
@@ -287,29 +278,26 @@ class MadVRDevice:
     async def _wake_on_lan(self) -> dict:
         """Send Wake-on-LAN magic packet."""
         mac_address = self._config.mac_address
-        _LOG.info(f"[{self.name}] Wake-on-LAN triggered, MAC address: {mac_address}")
         
         if not mac_address:
             _LOG.error(f"[{self.name}] No MAC address available for WOL")
             return {"success": False, "error": "No MAC address"}
 
         try:
-            _LOG.info(f"[{self.name}] Creating WOL magic packet for MAC: {mac_address}")
-            mac_bytes = bytes.fromhex(mac_address.replace("-", "").replace(":", ""))
+            mac_with_colons = mac_address.replace("-", ":")
+            _LOG.info(f"[{self.name}] Sending WOL packet to MAC: {mac_with_colons}")
+            
+            mac_bytes = bytes.fromhex(mac_with_colons.replace(":", ""))
             magic_packet = b'\xff' * 6 + mac_bytes * 16
-            _LOG.debug(f"[{self.name}] Magic packet size: {len(magic_packet)} bytes")
 
             sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
             sock.sendto(magic_packet, ('<broadcast>', 9))
             sock.close()
 
-            _LOG.info(f"[{self.name}] Wake-on-LAN packet sent to {mac_address}")
-            _LOG.info(f"[{self.name}] Waiting 3 seconds for device to wake...")
-            
+            _LOG.info(f"[{self.name}] WOL packet sent, waiting 3 seconds...")
             await asyncio.sleep(3)
             
-            _LOG.info(f"[{self.name}] Wake-on-LAN sequence complete")
             return {"success": True}
 
         except Exception as e:
