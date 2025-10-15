@@ -1,5 +1,5 @@
 """
-Media Player entity for madVR Envy - STATUS DISPLAY ONLY (No user commands).
+Media Player entity for madVR Envy.
 
 :copyright: (c) 2025 by Meir Miyara
 :license: MPL-2.0, see LICENSE for more details.
@@ -13,13 +13,11 @@ from ucapi.media_player import Attributes, Commands, DeviceClasses, Features, Me
 
 from uc_intg_madvr.config import MadVRConfig
 from uc_intg_madvr.device import MadVRDevice
-from uc_intg_madvr import const
 
 _LOG = logging.getLogger(__name__)
 
 
 class MadVRMediaPlayer(MediaPlayer):
-    """Media Player entity for madVR device status display ONLY."""
 
     def __init__(self, config: MadVRConfig, device: MadVRDevice):
         self._config = config
@@ -50,16 +48,15 @@ class MadVRMediaPlayer(MediaPlayer):
     async def command_handler(
         self, entity: MediaPlayer, cmd_id: str, params: dict[str, Any] | None
     ) -> StatusCodes:
-        """Handle media player commands."""
         _LOG.info(f"Media player command: {cmd_id}")
 
         try:
             if cmd_id == Commands.ON:
-                result = await self._device.send_command(const.CMD_STANDBY)
+                result = await self._device.send_command("Standby")
                 return StatusCodes.OK if result["success"] else StatusCodes.SERVER_ERROR
             
             elif cmd_id == Commands.OFF:
-                result = await self._device.send_command(const.CMD_POWER_OFF)
+                result = await self._device.send_command("Standby")
                 return StatusCodes.OK if result["success"] else StatusCodes.SERVER_ERROR
             
             else:
