@@ -1,5 +1,5 @@
 """
-Remote control entity for madVR Envy.
+Remote control entity for madVR Envy - Complete IP Control Implementation.
 
 :copyright: (c) 2025 by Meir Miyara
 :license: MPL-2.0, see LICENSE for more details.
@@ -46,23 +46,45 @@ class MadVRRemote(Remote):
 
         try:
             if cmd_id == Commands.ON:
-                result = await self._device.send_command(const.CMD_STANDBY)
+                task = asyncio.create_task(self._device.send_command(const.CMD_STANDBY))
+                
+                try:
+                    result = await asyncio.wait_for(task, timeout=3.0)
+                    return StatusCodes.OK if result["success"] else StatusCodes.SERVER_ERROR
+                except asyncio.TimeoutError:
+                    _LOG.info("Power ON command initiated (may take up to 40s for WOL)")
+                    return StatusCodes.OK
+                    
             elif cmd_id == Commands.OFF:
                 result = await self._device.send_command(const.CMD_STANDBY)
+                return StatusCodes.OK if result["success"] else StatusCodes.SERVER_ERROR
+                
             elif cmd_id == Commands.SEND_CMD:
                 if not params or "command" not in params:
                     _LOG.error("send_cmd received without command parameter")
                     return StatusCodes.BAD_REQUEST
                 
                 command = params["command"]
-                result = await self._device.send_command(command)
+                
+                # Check if this is a power-related command that might trigger WOL
+                if command == const.CMD_STANDBY and self._device.state.value == "OFF":
+                    # Handle like Commands.ON
+                    task = asyncio.create_task(self._device.send_command(command))
+                    try:
+                        result = await asyncio.wait_for(task, timeout=3.0)
+                        return StatusCodes.OK if result["success"] else StatusCodes.SERVER_ERROR
+                    except asyncio.TimeoutError:
+                        _LOG.info(f"Command {command} initiated (may involve WOL)")
+                        return StatusCodes.OK
+                else:
+                    # Normal command
+                    result = await self._device.send_command(command)
+                    return StatusCodes.OK if result["success"] else StatusCodes.SERVER_ERROR
             else:
                 _LOG.warning(f"Unknown command: {cmd_id}")
                 return StatusCodes.NOT_IMPLEMENTED
 
             await asyncio.sleep(const.COMMAND_DELAY)
-
-            return StatusCodes.OK if result["success"] else StatusCodes.SERVER_ERROR
 
         except Exception as e:
             _LOG.error(f"Command failed: {e}", exc_info=True)
