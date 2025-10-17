@@ -21,7 +21,6 @@ _LOG = logging.getLogger(__name__)
 
 
 class MadVRRemote(Remote):
-    """Complete madVR Envy remote control with full IP control command set."""
 
     def __init__(self, config: MadVRConfig, device: MadVRDevice):
         self._config = config
@@ -43,37 +42,55 @@ class MadVRRemote(Remote):
     async def command_handler(
         self, entity: Remote, cmd_id: str, params: dict[str, Any] | None = None
     ) -> StatusCodes:
-        """Handle remote commands."""
         _LOG.info(f"Remote command: {cmd_id}, params: {params}")
 
         try:
             if cmd_id == Commands.ON:
-                result = await self._device.send_command(const.CMD_STANDBY)
+                task = asyncio.create_task(self._device.send_command(const.CMD_STANDBY))
+                
+                try:
+                    result = await asyncio.wait_for(task, timeout=3.0)
+                    return StatusCodes.OK if result["success"] else StatusCodes.SERVER_ERROR
+                except asyncio.TimeoutError:
+                    _LOG.info("Power ON command initiated (may take up to 40s for WOL)")
+                    return StatusCodes.OK
+                    
             elif cmd_id == Commands.OFF:
-                result = await self._device.send_command(const.CMD_POWER_OFF)
-            
+                result = await self._device.send_command(const.CMD_STANDBY)
+                return StatusCodes.OK if result["success"] else StatusCodes.SERVER_ERROR
+                
             elif cmd_id == Commands.SEND_CMD:
                 if not params or "command" not in params:
                     _LOG.error("send_cmd received without command parameter")
                     return StatusCodes.BAD_REQUEST
                 
                 command = params["command"]
-                result = await self._device.send_command(command)
-            
+                
+                # Check if this is a power-related command that might trigger WOL
+                if command == const.CMD_STANDBY and self._device.state.value == "OFF":
+                    # Handle like Commands.ON
+                    task = asyncio.create_task(self._device.send_command(command))
+                    try:
+                        result = await asyncio.wait_for(task, timeout=3.0)
+                        return StatusCodes.OK if result["success"] else StatusCodes.SERVER_ERROR
+                    except asyncio.TimeoutError:
+                        _LOG.info(f"Command {command} initiated (may involve WOL)")
+                        return StatusCodes.OK
+                else:
+                    # Normal command
+                    result = await self._device.send_command(command)
+                    return StatusCodes.OK if result["success"] else StatusCodes.SERVER_ERROR
             else:
                 _LOG.warning(f"Unknown command: {cmd_id}")
                 return StatusCodes.NOT_IMPLEMENTED
 
             await asyncio.sleep(const.COMMAND_DELAY)
 
-            return StatusCodes.OK if result["success"] else StatusCodes.SERVER_ERROR
-
         except Exception as e:
             _LOG.error(f"Command failed: {e}", exc_info=True)
             return StatusCodes.SERVER_ERROR
 
     def _create_ui_pages(self) -> list[UiPage]:
-        """Create all remote UI pages."""
         return [
             self._create_power_page(),
             self._create_menu_navigation_page(),
@@ -85,7 +102,6 @@ class MadVRRemote(Remote):
         ]
 
     def _create_power_page(self) -> UiPage:
-        """Power control page."""
         items = [
             create_ui_text("Power Control", 0, 0, size=Size(4, 1)),
             create_ui_text("Standby", 0, 1, cmd=EntityCommand("send_cmd", {"command": const.CMD_STANDBY})),
@@ -96,7 +112,6 @@ class MadVRRemote(Remote):
         return UiPage(page_id="power", name="Power", grid=Size(4, 6), items=items)
 
     def _create_menu_navigation_page(self) -> UiPage:
-        """Menu navigation and D-Pad control page."""
         items = [
             create_ui_text("Menu Navigation", 0, 0, size=Size(4, 1)),
             
@@ -117,7 +132,6 @@ class MadVRRemote(Remote):
         return UiPage(page_id="menu", name="Menu", grid=Size(4, 6), items=items)
 
     def _create_aspect_ratio_page(self) -> UiPage:
-        """Aspect ratio control page."""
         items = [
             create_ui_text("Aspect Ratio", 0, 0, size=Size(4, 1)),
             
@@ -147,7 +161,6 @@ class MadVRRemote(Remote):
         return UiPage(page_id="aspect", name="Aspect", grid=Size(4, 6), items=items)
 
     def _create_picture_settings_page(self) -> UiPage:
-        """Picture settings and tone mapping page."""
         items = [
             create_ui_text("Picture Settings", 0, 0, size=Size(4, 1)),
             
@@ -165,7 +178,6 @@ class MadVRRemote(Remote):
         return UiPage(page_id="picture", name="Picture", grid=Size(4, 6), items=items)
 
     def _create_test_patterns_page(self) -> UiPage:
-        """Test patterns and color buttons page."""
         items = [
             create_ui_text("Test Patterns", 0, 0, size=Size(4, 1)),
             create_ui_text("Open", 0, 1, size=Size(2, 1), cmd=EntityCommand("send_cmd", {"command": f"{const.CMD_OPEN_MENU} {const.MENU_TEST_PATTERNS}"})),
@@ -181,7 +193,6 @@ class MadVRRemote(Remote):
         return UiPage(page_id="test", name="Test", grid=Size(4, 6), items=items)
 
     def _create_info_page(self) -> UiPage:
-        """Device information query page."""
         items = [
             create_ui_text("Device Info", 0, 0, size=Size(4, 1)),
             create_ui_text("Signal", 0, 1, size=Size(2, 1), cmd=EntityCommand("send_cmd", {"command": const.CMD_GET_SIGNAL_INFO})),
@@ -193,7 +204,6 @@ class MadVRRemote(Remote):
         return UiPage(page_id="info", name="Info", grid=Size(4, 6), items=items)
 
     def _create_utility_page(self) -> UiPage:
-        """Utility and diagnostic commands page."""
         items = [
             create_ui_text("Utility", 0, 0, size=Size(4, 1)),
             create_ui_text("Force 1080p60", 0, 1, size=Size(2, 1), cmd=EntityCommand("send_cmd", {"command": const.CMD_FORCE_1080P60})),
