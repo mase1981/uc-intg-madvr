@@ -140,6 +140,13 @@ class MadVRRemote(Remote):
 
                 command = params["command"]
 
+                # Check if this is a simple command name (from custom button mapping)
+                # If so, map it to the actual device protocol command
+                device_command = self._map_simple_command_to_device(command)
+                if device_command:
+                    _LOG.debug(f"Mapped simple command '{command}' to device command '{device_command}'")
+                    command = device_command
+
                 # Check if this is a power-related command that might trigger WOL
                 if command == const.CMD_STANDBY and self._device.state.value == "OFF":
                     # Handle like Commands.ON
