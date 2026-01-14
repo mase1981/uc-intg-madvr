@@ -1,6 +1,6 @@
 {
   "driver_id": "madvr",
-  "version": "1.0.9",
+  "version": "1.1.0",
   "min_core_api": "0.21.0",
   "name": {
     "en": "madVR Envy"
@@ -34,5 +34,5 @@
       }
     ]
   },
-  "release_date": "2025-01-13"
+  "release_date": "2026-01-13"
 }
