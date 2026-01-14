@@ -28,16 +28,90 @@ class MadVRRemote(Remote):
 
         entity_id = f"remote.{config.host.replace('.', '_')}"
 
+        # Define simple commands for custom button mapping
+        simple_commands = self._get_simple_commands()
+
         super().__init__(
             identifier=entity_id,
             name=config.name,
             features=[Features.ON_OFF, Features.SEND_CMD],
             attributes={Attributes.STATE: States.UNKNOWN},
+            simple_commands=simple_commands,
             ui_pages=self._create_ui_pages(),
             cmd_handler=self.command_handler,
         )
 
-        _LOG.info(f"Created remote entity: {entity_id}")
+        _LOG.info(f"Created remote entity: {entity_id} with {len(simple_commands)} simple commands")
+
+    def _get_simple_commands(self) -> list[str]:
+        """Return list of simple commands for custom button mapping."""
+        commands = [
+            # Power commands
+            "Standby",
+            "Power Off",
+            "Restart",
+            "Reload Software",
+
+            # Menu commands
+            "Open Info Menu",
+            "Open Settings Menu",
+            "Open Configuration Menu",
+            "Open Profiles Menu",
+            "Open Test Patterns Menu",
+            "Close Menu",
+
+            # Navigation keys
+            "Up",
+            "Down",
+            "Left",
+            "Right",
+            "OK",
+            "Back",
+
+            # Color keys
+            "Red",
+            "Green",
+            "Blue",
+            "Yellow",
+            "Magenta",
+            "Cyan",
+
+            # Aspect ratio presets
+            "Aspect Auto",
+            "Aspect Hold",
+            "Aspect 4:3",
+            "Aspect 16:9",
+            "Aspect 1.85:1",
+            "Aspect 2.00:1",
+            "Aspect 2.35:1",
+            "Aspect 2.40:1",
+            "Aspect 2.55:1",
+            "Aspect 2.76:1",
+
+            # Picture settings toggles
+            "Toggle Tone Map",
+            "Tone Map On",
+            "Tone Map Off",
+            "Toggle Highlight Recovery",
+            "Toggle Shadow Recovery",
+            "Toggle Contrast Recovery",
+            "Toggle 3DLUT",
+            "Toggle Histogram",
+            "Toggle Debug OSD",
+
+            # Info commands
+            "Get Signal Info",
+            "Get Aspect Ratio",
+            "Get Temperatures",
+            "Get MAC Address",
+            "Get Masking Ratio",
+
+            # Utility commands
+            "Force 1080p60",
+            "Hotplug",
+            "Refresh License",
+        ]
+        return commands
 
     async def command_handler(
         self, entity: Remote, cmd_id: str, params: dict[str, Any] | None = None
@@ -47,25 +121,25 @@ class MadVRRemote(Remote):
         try:
             if cmd_id == Commands.ON:
                 task = asyncio.create_task(self._device.send_command(const.CMD_STANDBY))
-                
+
                 try:
                     result = await asyncio.wait_for(task, timeout=3.0)
                     return StatusCodes.OK if result["success"] else StatusCodes.SERVER_ERROR
                 except asyncio.TimeoutError:
                     _LOG.info("Power ON command initiated (may take up to 40s for WOL)")
                     return StatusCodes.OK
-                    
+
             elif cmd_id == Commands.OFF:
                 result = await self._device.send_command(const.CMD_STANDBY)
                 return StatusCodes.OK if result["success"] else StatusCodes.SERVER_ERROR
-                
+
             elif cmd_id == Commands.SEND_CMD:
                 if not params or "command" not in params:
                     _LOG.error("send_cmd received without command parameter")
                     return StatusCodes.BAD_REQUEST
-                
+
                 command = params["command"]
-                
+
                 # Check if this is a power-related command that might trigger WOL
                 if command == const.CMD_STANDBY and self._device.state.value == "OFF":
                     # Handle like Commands.ON
@@ -81,14 +155,90 @@ class MadVRRemote(Remote):
                     result = await self._device.send_command(command)
                     return StatusCodes.OK if result["success"] else StatusCodes.SERVER_ERROR
             else:
-                _LOG.warning(f"Unknown command: {cmd_id}")
-                return StatusCodes.NOT_IMPLEMENTED
+                # Handle simple commands
+                device_command = self._map_simple_command_to_device(cmd_id)
+                if device_command:
+                    result = await self._device.send_command(device_command)
+                    return StatusCodes.OK if result["success"] else StatusCodes.SERVER_ERROR
+                else:
+                    _LOG.warning(f"Unknown command: {cmd_id}")
+                    return StatusCodes.NOT_IMPLEMENTED
 
             await asyncio.sleep(const.COMMAND_DELAY)
 
         except Exception as e:
             _LOG.error(f"Command failed: {e}", exc_info=True)
             return StatusCodes.SERVER_ERROR
+
+    def _map_simple_command_to_device(self, simple_cmd: str) -> str | None:
+        """Map simple command names to device protocol commands."""
+        command_map = {
+            # Power commands
+            "Standby": const.CMD_STANDBY,
+            "Power Off": const.CMD_POWER_OFF,
+            "Restart": const.CMD_RESTART,
+            "Reload Software": const.CMD_RELOAD_SOFTWARE,
+
+            # Menu commands
+            "Open Info Menu": f"{const.CMD_OPEN_MENU} {const.MENU_INFO}",
+            "Open Settings Menu": f"{const.CMD_OPEN_MENU} {const.MENU_SETTINGS}",
+            "Open Configuration Menu": f"{const.CMD_OPEN_MENU} {const.MENU_CONFIGURATION}",
+            "Open Profiles Menu": f"{const.CMD_OPEN_MENU} {const.MENU_PROFILES}",
+            "Open Test Patterns Menu": f"{const.CMD_OPEN_MENU} {const.MENU_TEST_PATTERNS}",
+            "Close Menu": const.CMD_CLOSE_MENU,
+
+            # Navigation keys
+            "Up": f"{const.CMD_KEY_PRESS} {const.KEY_UP}",
+            "Down": f"{const.CMD_KEY_PRESS} {const.KEY_DOWN}",
+            "Left": f"{const.CMD_KEY_PRESS} {const.KEY_LEFT}",
+            "Right": f"{const.CMD_KEY_PRESS} {const.KEY_RIGHT}",
+            "OK": f"{const.CMD_KEY_PRESS} {const.KEY_OK}",
+            "Back": f"{const.CMD_KEY_PRESS} {const.KEY_BACK}",
+
+            # Color keys
+            "Red": f"{const.CMD_KEY_PRESS} {const.KEY_RED}",
+            "Green": f"{const.CMD_KEY_PRESS} {const.KEY_GREEN}",
+            "Blue": f"{const.CMD_KEY_PRESS} {const.KEY_BLUE}",
+            "Yellow": f"{const.CMD_KEY_PRESS} {const.KEY_YELLOW}",
+            "Magenta": f"{const.CMD_KEY_PRESS} {const.KEY_MAGENTA}",
+            "Cyan": f"{const.CMD_KEY_PRESS} {const.KEY_CYAN}",
+
+            # Aspect ratio presets
+            "Aspect Auto": f"{const.CMD_SET_ASPECT_RATIO_MODE} {const.AR_AUTO}",
+            "Aspect Hold": f"{const.CMD_SET_ASPECT_RATIO_MODE} {const.AR_HOLD}",
+            "Aspect 4:3": f"{const.CMD_SET_ASPECT_RATIO_MODE} {const.AR_4_3}",
+            "Aspect 16:9": f"{const.CMD_SET_ASPECT_RATIO_MODE} {const.AR_16_9}",
+            "Aspect 1.85:1": f"{const.CMD_SET_ASPECT_RATIO_MODE} {const.AR_1_85}",
+            "Aspect 2.00:1": f"{const.CMD_SET_ASPECT_RATIO_MODE} {const.AR_2_00}",
+            "Aspect 2.35:1": f"{const.CMD_SET_ASPECT_RATIO_MODE} {const.AR_2_35}",
+            "Aspect 2.40:1": f"{const.CMD_SET_ASPECT_RATIO_MODE} {const.AR_2_40}",
+            "Aspect 2.55:1": f"{const.CMD_SET_ASPECT_RATIO_MODE} {const.AR_2_55}",
+            "Aspect 2.76:1": f"{const.CMD_SET_ASPECT_RATIO_MODE} {const.AR_2_76}",
+
+            # Picture settings toggles
+            "Toggle Tone Map": f"{const.CMD_TOGGLE} {const.TOGGLE_TONE_MAP}",
+            "Tone Map On": const.CMD_TONE_MAP_ON,
+            "Tone Map Off": const.CMD_TONE_MAP_OFF,
+            "Toggle Highlight Recovery": f"{const.CMD_TOGGLE} {const.TOGGLE_HIGHLIGHT_RECOVERY}",
+            "Toggle Shadow Recovery": f"{const.CMD_TOGGLE} {const.TOGGLE_SHADOW_RECOVERY}",
+            "Toggle Contrast Recovery": f"{const.CMD_TOGGLE} {const.TOGGLE_CONTRAST_RECOVERY}",
+            "Toggle 3DLUT": f"{const.CMD_TOGGLE} {const.TOGGLE_3DLUT}",
+            "Toggle Histogram": f"{const.CMD_TOGGLE} {const.TOGGLE_HISTOGRAM}",
+            "Toggle Debug OSD": f"{const.CMD_TOGGLE} {const.TOGGLE_DEBUG_OSD}",
+
+            # Info commands
+            "Get Signal Info": const.CMD_GET_SIGNAL_INFO,
+            "Get Aspect Ratio": const.CMD_GET_ASPECT_RATIO,
+            "Get Temperatures": const.CMD_GET_TEMPERATURES,
+            "Get MAC Address": const.CMD_GET_MAC_ADDRESS,
+            "Get Masking Ratio": const.CMD_GET_MASKING_RATIO,
+
+            # Utility commands
+            "Force 1080p60": const.CMD_FORCE_1080P60,
+            "Hotplug": const.CMD_HOTPLUG,
+            "Refresh License": const.CMD_REFRESH_LICENSE,
+        }
+        return command_map.get(simple_cmd)
 
     def _create_ui_pages(self) -> list[UiPage]:
         return [
