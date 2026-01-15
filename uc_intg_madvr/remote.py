@@ -45,73 +45,8 @@ class MadVRRemote(Remote):
 
     def _get_simple_commands(self) -> list[str]:
         """Return list of simple commands for custom button mapping."""
-        commands = [
-            # Power commands
-            "Standby",
-            "Power Off",
-            "Restart",
-            "Reload Software",
-
-            # Menu commands
-            "Open Info Menu",
-            "Open Settings Menu",
-            "Open Configuration Menu",
-            "Open Profiles Menu",
-            "Open Test Patterns Menu",
-            "Close Menu",
-
-            # Navigation keys
-            "Up",
-            "Down",
-            "Left",
-            "Right",
-            "OK",
-            "Back",
-
-            # Color keys
-            "Red",
-            "Green",
-            "Blue",
-            "Yellow",
-            "Magenta",
-            "Cyan",
-
-            # Aspect ratio presets
-            "Aspect Auto",
-            "Aspect Hold",
-            "Aspect 4:3",
-            "Aspect 16:9",
-            "Aspect 1.85:1",
-            "Aspect 2.00:1",
-            "Aspect 2.35:1",
-            "Aspect 2.40:1",
-            "Aspect 2.55:1",
-            "Aspect 2.76:1",
-
-            # Picture settings toggles
-            "Toggle Tone Map",
-            "Tone Map On",
-            "Tone Map Off",
-            "Toggle Highlight Recovery",
-            "Toggle Shadow Recovery",
-            "Toggle Contrast Recovery",
-            "Toggle 3DLUT",
-            "Toggle Histogram",
-            "Toggle Debug OSD",
-
-            # Info commands
-            "Get Signal Info",
-            "Get Aspect Ratio",
-            "Get Temperatures",
-            "Get MAC Address",
-            "Get Masking Ratio",
-
-            # Utility commands
-            "Force 1080p60",
-            "Hotplug",
-            "Refresh License",
-        ]
-        return commands
+        # Return the keys from the command map to ensure consistency
+        return list(self._get_command_map().keys())
 
     async def command_handler(
         self, entity: Remote, cmd_id: str, params: dict[str, Any] | None = None
@@ -139,6 +74,13 @@ class MadVRRemote(Remote):
                     return StatusCodes.BAD_REQUEST
 
                 command = params["command"]
+
+                # Check if this is a simple command name (from custom button mapping)
+                # If so, map it to the actual device protocol command
+                device_command = self._map_simple_command_to_device(command)
+                if device_command:
+                    _LOG.debug(f"Mapped simple command '{command}' to device command '{device_command}'")
+                    command = device_command
 
                 # Check if this is a power-related command that might trigger WOL
                 if command == const.CMD_STANDBY and self._device.state.value == "OFF":
@@ -170,9 +112,9 @@ class MadVRRemote(Remote):
             _LOG.error(f"Command failed: {e}", exc_info=True)
             return StatusCodes.SERVER_ERROR
 
-    def _map_simple_command_to_device(self, simple_cmd: str) -> str | None:
-        """Map simple command names to device protocol commands."""
-        command_map = {
+    def _get_command_map(self) -> dict[str, str]:
+        """Get the complete command mapping dictionary."""
+        return {
             # Power commands
             "Standby": const.CMD_STANDBY,
             "Power Off": const.CMD_POWER_OFF,
@@ -238,7 +180,10 @@ class MadVRRemote(Remote):
             "Hotplug": const.CMD_HOTPLUG,
             "Refresh License": const.CMD_REFRESH_LICENSE,
         }
-        return command_map.get(simple_cmd)
+
+    def _map_simple_command_to_device(self, simple_cmd: str) -> str | None:
+        """Map simple command names to device protocol commands."""
+        return self._get_command_map().get(simple_cmd)
 
     def _create_ui_pages(self) -> list[UiPage]:
         return [
