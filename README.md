@@ -15,6 +15,18 @@ Control your madVR Envy video processor directly from your Unfolded Circle Remot
 
 This integration provides comprehensive control of your madVR Envy video processor with real-time status monitoring, advanced picture controls, and complete menu navigation directly from your Unfolded Circle Remote.
 
+---
+## ❤️ Support Development ❤️
+
+If you find this integration useful, consider supporting development:
+
+[![GitHub Sponsors](https://img.shields.io/badge/Sponsor-GitHub-pink?style=for-the-badge&logo=github)](https://github.com/sponsors/mase1981)
+[![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-FFDD00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black)](https://www.buymeacoffee.com/meirmiyara)
+[![PayPal](https://img.shields.io/badge/PayPal-00457C?style=for-the-badge&logo=paypal&logoColor=white)](https://paypal.me/mmiyara)
+
+Your support helps maintain this integration. Thank you! ❤️
+---
+
 ### 🎮 **Remote Control Entity** (Primary Control) (Media Player is for state pulling only and have no other function)
 
 #### **Power Management**
