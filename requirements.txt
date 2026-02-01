@@ -1,2 +1,2 @@
-ucapi==0.5.1
+ucapi>=0.5.2
 certifi

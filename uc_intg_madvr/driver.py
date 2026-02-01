@@ -16,6 +16,13 @@ from uc_intg_madvr.config import MadVRConfig
 from uc_intg_madvr.device import MadVRDevice, EVENTS as DeviceEvents, PowerState
 from uc_intg_madvr.media_player import MadVRMediaPlayer
 from uc_intg_madvr.remote import MadVRRemote
+from uc_intg_madvr.sensor import (
+    MadVRSignalSensor,
+    MadVRTemperatureSensor,
+    MadVRAspectRatioSensor,
+    MadVRMaskingRatioSensor,
+)
+from uc_intg_madvr.select import MadVRAspectRatioSelect
 from uc_intg_madvr.setup import MadVRSetup
 
 _LOG = logging.getLogger(__name__)
@@ -25,6 +32,8 @@ _config: MadVRConfig | None = None
 _device: MadVRDevice | None = None
 _media_player: MadVRMediaPlayer | None = None
 _remote: MadVRRemote | None = None
+_sensors: list = []
+_select: MadVRAspectRatioSelect | None = None
 
 
 def _device_state_to_media_player_state(dev_state: PowerState) -> ucapi.media_player.States:
@@ -68,34 +77,49 @@ async def on_device_update(identifier: str, update: dict[str, Any] | None) -> No
     if not update:
         return
 
-    _LOG.debug(f"Device update received: {update}")
+    _LOG.debug(f"Device update for {identifier}: {update}")
 
-    if _media_player and api.configured_entities.contains(_media_player.id):
-        mp_attributes = {}
-        
-        if "state" in update:
-            mp_state = _device_state_to_media_player_state(update["state"])
-            mp_attributes[ucapi.media_player.Attributes.STATE] = mp_state
-            _LOG.info(f"Media Player state update: {update['state']} → {mp_state}")
-        
-        if "signal_info" in update:
-            mp_attributes[ucapi.media_player.Attributes.MEDIA_TITLE] = update["signal_info"]
-        
-        if mp_attributes:
-            api.configured_entities.update_attributes(_media_player.id, mp_attributes)
+    # Handle media player updates
+    if _media_player and identifier == _media_player.id.split('.')[1]:
+        if api.configured_entities.contains(_media_player.id):
+            mp_attributes = {}
 
-    if _remote and api.configured_entities.contains(_remote.id):
-        if "state" in update:
-            remote_state = _device_state_to_remote_state(update["state"])
-            remote_attributes = {
-                ucapi.remote.Attributes.STATE: remote_state
-            }
-            api.configured_entities.update_attributes(_remote.id, remote_attributes)
+            if "state" in update:
+                mp_state = _device_state_to_media_player_state(update["state"])
+                mp_attributes[ucapi.media_player.Attributes.STATE] = mp_state
+                _LOG.info(f"Media Player state update: {update['state']} → {mp_state}")
+
+            if "signal_info" in update:
+                mp_attributes[ucapi.media_player.Attributes.MEDIA_TITLE] = update["signal_info"]
+
+            if mp_attributes:
+                api.configured_entities.update_attributes(_media_player.id, mp_attributes)
+
+    # Handle remote updates
+    if _remote and identifier == _remote.id.split('.')[1]:
+        if api.configured_entities.contains(_remote.id):
+            if "state" in update:
+                remote_state = _device_state_to_remote_state(update["state"])
+                remote_attributes = {
+                    ucapi.remote.Attributes.STATE: remote_state
+                }
+                api.configured_entities.update_attributes(_remote.id, remote_attributes)
+
+    # Handle sensor updates
+    for sensor in _sensors:
+        if identifier == sensor.id:
+            if api.configured_entities.contains(sensor.id):
+                api.configured_entities.update_attributes(sensor.id, update)
+
+    # Handle select entity updates
+    if _select and identifier == _select.id:
+        if api.configured_entities.contains(_select.id):
+            api.configured_entities.update_attributes(_select.id, update)
 
 
 async def _initialize_entities():
     """Initialize device and entities."""
-    global _device, _media_player, _remote
+    global _device, _media_player, _remote, _sensors, _select
 
     if not _config or not _config.is_configured():
         _LOG.info("Integration not configured")
@@ -106,18 +130,39 @@ async def _initialize_entities():
 
         loop = asyncio.get_running_loop()
         _device = MadVRDevice(_config, loop)
-        
+
         _device.events.on(DeviceEvents.UPDATE, on_device_update)
 
         _media_player = MadVRMediaPlayer(_config, _device)
         _remote = MadVRRemote(_config, _device)
 
+        # Create sensor entities
+        _sensors = [
+            MadVRSignalSensor(_config, _device),
+            MadVRTemperatureSensor(_config, _device, 0, "GPU"),
+            MadVRTemperatureSensor(_config, _device, 1, "CPU"),
+            MadVRTemperatureSensor(_config, _device, 2, "Board"),
+            MadVRTemperatureSensor(_config, _device, 3, "PSU"),
+            MadVRAspectRatioSensor(_config, _device),
+            MadVRMaskingRatioSensor(_config, _device),
+        ]
+
+        # Create select entity
+        _select = MadVRAspectRatioSelect(_config, _device)
+
         _LOG.info(f"Media Player features: {_media_player.features}")
         _LOG.info(f"Remote features: {_remote.features}")
+        _LOG.info(f"Created {len(_sensors)} sensor entities")
+        _LOG.info(f"Created select entity for aspect ratio mode")
 
         api.available_entities.clear()
         api.available_entities.add(_media_player)
         api.available_entities.add(_remote)
+
+        for sensor in _sensors:
+            api.available_entities.add(sensor)
+
+        api.available_entities.add(_select)
 
         await _device.start_polling()
 

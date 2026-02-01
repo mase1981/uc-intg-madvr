@@ -199,8 +199,8 @@ class MadVRRemote(Remote):
     def _create_power_page(self) -> UiPage:
         items = [
             create_ui_text("Power Control", 0, 0, size=Size(4, 1)),
-            create_ui_text("Standby", 0, 1, cmd=EntityCommand("send_cmd", {"command": const.CMD_STANDBY})),
-            create_ui_text("Power Off", 1, 1, cmd=EntityCommand("send_cmd", {"command": const.CMD_POWER_OFF})),
+            create_ui_text("Power On", 0, 1, cmd=Commands.ON),
+            create_ui_text("Power Off", 1, 1, cmd=Commands.OFF),
             create_ui_text("Restart", 2, 1, cmd=EntityCommand("send_cmd", {"command": const.CMD_RESTART})),
             create_ui_text("Reload SW", 3, 1, cmd=EntityCommand("send_cmd", {"command": const.CMD_RELOAD_SOFTWARE})),
         ]
