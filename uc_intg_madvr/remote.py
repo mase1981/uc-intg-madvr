@@ -65,7 +65,7 @@ class MadVRRemote(Remote):
                     return StatusCodes.OK
 
             elif cmd_id == Commands.OFF:
-                result = await self._device.send_command(const.CMD_STANDBY)
+                result = await self._device.send_command(const.CMD_POWER_OFF)
                 return StatusCodes.OK if result["success"] else StatusCodes.SERVER_ERROR
 
             elif cmd_id == Commands.SEND_CMD:

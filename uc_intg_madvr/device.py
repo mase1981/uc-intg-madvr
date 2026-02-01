@@ -112,8 +112,13 @@ class MadVRDevice:
                 
                 if signal_result["success"] and signal_result.get("data"):
                     signal_data = signal_result["data"]
-                    
-                    if const.NO_SIGNAL in signal_data or const.RESPONSE_ERROR in signal_data:
+
+                    # Ignore temperature responses that sometimes get mixed with signal queries
+                    if "Temperatures" in signal_data:
+                        _LOG.debug(f"[{self.name}] Ignoring temperature data in signal query")
+                        new_state = PowerState.STANDBY
+                        self._signal_info = "Standby Mode"
+                    elif const.NO_SIGNAL in signal_data or const.RESPONSE_ERROR in signal_data:
                         new_state = PowerState.STANDBY
                         self._signal_info = "No Signal (Standby)"
                     else:
