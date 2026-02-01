@@ -42,6 +42,12 @@ class MadVRDevice:
         self._reader: asyncio.StreamReader | None = None
         self._writer: asyncio.StreamWriter | None = None
 
+        # Sensor data
+        self._temperatures: list[int] = [0, 0, 0, 0]  # GPU, CPU, Board, PSU
+        self._aspect_ratio: str = "Unknown"
+        self._masking_ratio: str = "Unknown"
+        self._aspect_ratio_mode: str = "Auto"
+
     @property
     def identifier(self) -> str:
         return self._config.host.replace('.', '_')
@@ -120,6 +126,9 @@ class MadVRDevice:
                 else:
                     new_state = PowerState.STANDBY
                     self._signal_info = "Standby Mode"
+
+                # Query sensor data when device is online
+                await self._update_sensor_data()
             else:
                 new_state = PowerState.OFF
                 self._signal_info = "Powered Off"
@@ -155,6 +164,89 @@ class MadVRDevice:
             _LOG.info(f"[{self.name}] Wake-on-LAN sequence completed")
         
         return await self._send_command(command)
+
+    def set_aspect_ratio_mode(self, mode: str):
+        """Set aspect ratio mode and emit update event.
+
+        Args:
+            mode: Aspect ratio mode to set
+        """
+        self._aspect_ratio_mode = mode
+        self._emit_select_update()
+
+    def _emit_select_update(self):
+        """Emit update event for select entity."""
+        from ucapi.select import Attributes as SelectAttributes, States as SelectStates
+
+        select_id = f"select.{self.identifier}.aspect_ratio_mode"
+
+        self.events.emit(EVENTS.UPDATE, select_id, {
+            SelectAttributes.STATE: SelectStates.ON,
+            SelectAttributes.CURRENT_OPTION: self._aspect_ratio_mode
+        })
+
+    async def _update_sensor_data(self):
+        """Query sensor data and emit update events."""
+        from ucapi.sensor import Attributes as SensorAttributes, States as SensorStates
+
+        # Query temperatures
+        temp_result = await self._send_command(const.CMD_GET_TEMPERATURES, timeout=const.COMMAND_TIMEOUT)
+        if temp_result["success"] and temp_result.get("data"):
+            try:
+                # Parse: "Temperatures 65 58 42 45"
+                parts = temp_result["data"].split()
+                if len(parts) >= 5:
+                    self._temperatures = [int(parts[1]), int(parts[2]), int(parts[3]), int(parts[4])]
+
+                    # Emit events for each temperature sensor
+                    temp_names = ["gpu", "cpu", "board", "psu"]
+                    for idx, temp_name in enumerate(temp_names):
+                        sensor_id = f"sensor.{self.identifier}.temp_{temp_name}"
+                        self.events.emit(EVENTS.UPDATE, sensor_id, {
+                            SensorAttributes.STATE: SensorStates.ON,
+                            SensorAttributes.VALUE: self._temperatures[idx],
+                            SensorAttributes.UNIT: "°C"
+                        })
+            except (ValueError, IndexError) as e:
+                _LOG.debug(f"[{self.name}] Failed to parse temperatures: {e}")
+
+        # Query aspect ratio
+        aspect_result = await self._send_command(const.CMD_GET_ASPECT_RATIO, timeout=const.COMMAND_TIMEOUT)
+        if aspect_result["success"] and aspect_result.get("data"):
+            # Parse: "AspectRatio 1920:1080 1.778 178 "16:9""
+            aspect_data = aspect_result["data"]
+            if "AspectRatio" in aspect_data:
+                # Extract the readable part
+                parts = aspect_data.replace("AspectRatio", "").strip()
+                self._aspect_ratio = parts if parts else "Unknown"
+
+                sensor_id = f"sensor.{self.identifier}.aspect_ratio"
+                self.events.emit(EVENTS.UPDATE, sensor_id, {
+                    SensorAttributes.STATE: SensorStates.ON,
+                    SensorAttributes.VALUE: self._aspect_ratio
+                })
+
+        # Query masking ratio
+        masking_result = await self._send_command(const.CMD_GET_MASKING_RATIO, timeout=const.COMMAND_TIMEOUT)
+        if masking_result["success"] and masking_result.get("data"):
+            # Parse: "MaskingRatio 1920:1080 1.778 178"
+            masking_data = masking_result["data"]
+            if "MaskingRatio" in masking_data:
+                parts = masking_data.replace("MaskingRatio", "").strip()
+                self._masking_ratio = parts if parts else "Unknown"
+
+                sensor_id = f"sensor.{self.identifier}.masking_ratio"
+                self.events.emit(EVENTS.UPDATE, sensor_id, {
+                    SensorAttributes.STATE: SensorStates.ON,
+                    SensorAttributes.VALUE: self._masking_ratio
+                })
+
+        # Emit signal sensor update (already tracked in _signal_info)
+        signal_sensor_id = f"sensor.{self.identifier}.signal"
+        self.events.emit(EVENTS.UPDATE, signal_sensor_id, {
+            SensorAttributes.STATE: SensorStates.ON if self._state == PowerState.ON else SensorStates.UNAVAILABLE,
+            SensorAttributes.VALUE: self._signal_info
+        })
 
     async def _send_command(self, command: str, timeout: float = None) -> dict:
         if timeout is None:
