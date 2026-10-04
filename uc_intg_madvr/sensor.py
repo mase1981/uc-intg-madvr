@@ -24,7 +24,7 @@ class MadVRSignalSensor(Sensor):
         self._device = device
         self._config = config
 
-        entity_id = f"sensor.{config.host.replace('.', '_')}.signal"
+        entity_id = f"sensor.{config.device_id}.signal"
 
         super().__init__(
             entity_id,
@@ -58,7 +58,7 @@ class MadVRTemperatureSensor(Sensor):
         self._temp_index = temp_index
 
         # Protocol field order: 0=GPU, 1=HDMI, 2=CPU, 3=Mainboard
-        entity_id = f"sensor.{config.host.replace('.', '_')}.temp_{temp_name.lower()}"
+        entity_id = f"sensor.{config.device_id}.temp_{temp_name.lower()}"
 
         super().__init__(
             entity_id,
@@ -84,7 +84,7 @@ class MadVRAspectRatioSensor(Sensor):
         self._device = device
         self._config = config
 
-        entity_id = f"sensor.{config.host.replace('.', '_')}.aspect_ratio"
+        entity_id = f"sensor.{config.device_id}.aspect_ratio"
 
         super().__init__(
             entity_id,
@@ -109,7 +109,7 @@ class MadVRMaskingRatioSensor(Sensor):
         self._device = device
         self._config = config
 
-        entity_id = f"sensor.{config.host.replace('.', '_')}.masking_ratio"
+        entity_id = f"sensor.{config.device_id}.masking_ratio"
 
         super().__init__(
             entity_id,

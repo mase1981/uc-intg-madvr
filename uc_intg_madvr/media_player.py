@@ -24,7 +24,7 @@ class MadVRMediaPlayer(MediaPlayer):
         self._config = config
         self._device = device
 
-        entity_id = f"media_player.{config.host.replace('.', '_')}"
+        entity_id = f"media_player.{config.device_id}"
 
         features = [Features.ON_OFF]
 
@@ -54,8 +54,8 @@ class MadVRMediaPlayer(MediaPlayer):
         try:
             if cmd_id == Commands.ON:
                 # send_command handles WOL in the background and returns immediately
-                await self._device.send_command(const.CMD_STANDBY, power_intent="on")
-                return StatusCodes.OK
+                result = await self._device.send_command(const.CMD_STANDBY, power_intent="on")
+                return StatusCodes.OK if result["success"] else StatusCodes.SERVER_ERROR
 
             elif cmd_id == Commands.OFF:
                 # Use Standby instead of PowerOff for faster wake-up recovery.

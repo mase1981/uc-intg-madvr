@@ -45,7 +45,7 @@ class MadVRAspectRatioSelect(Select):
         self._config = config
         self._device = device
 
-        entity_id = f"select.{config.host.replace('.', '_')}.aspect_ratio_mode"
+        entity_id = f"select.{config.device_id}.aspect_ratio_mode"
 
         attributes = {
             Attributes.STATE: States.UNKNOWN,
