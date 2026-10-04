@@ -80,10 +80,11 @@ class MadVRDevice:
         self._power_off_time: float = 0.0  # for hysteresis
         self._fast_reconnect = False  # set by Restart/ReloadSoftware
         self._suspended = False  # True when UC Remote is in standby
+        self._unreachable_logged = False  # log a failed connection once per outage
 
     @property
     def identifier(self) -> str:
-        return self._config.host.replace('.', '_')
+        return self._config.device_id
 
     @property
     def name(self) -> str:
@@ -229,6 +230,16 @@ class MadVRDevice:
                 self._cancel_wol_task()
                 _LOG.info("[%s] Device already %s, off command successful", self.name, self._state.value)
                 return {"success": True}
+            if not self._config.mac_address:
+                # Without a MAC there is no Wake-on-LAN. The device may still be on (state unknown).
+                if await self._is_device_reachable():
+                    self._reset_backoff()
+                    self._reconnect_event.set()
+                    return {"success": True}
+                _LOG.warning("[%s] Cannot power on: no MAC address known for Wake-on-LAN. "
+                             "Power the Envy on once while the integration runs so it can read the MAC.",
+                             self.name)
+                return {"success": False, "error": "No MAC address configured"}
             _LOG.info("[%s] Device is %s, triggering Wake-on-LAN (background)", self.name, self._state.value)
             self._cancel_wol_task()
             self._wol_task = self._loop.create_task(self._wol_and_wait())
@@ -251,10 +262,14 @@ class MadVRDevice:
 
         result = await self._send_cmd(command)
 
-        # Reactive recovery: if command failed and we thought device was ON, state is stale.
-        if not result["success"] and self._state == PowerState.ON:
+        # Reactive recovery: if the connection failed and we thought device was ON, state is stale.
+        # An ERROR reply means the device answered (e.g. a command not available right now).
+        if not result["success"] and not result.get("device_error") and self._state == PowerState.ON:
             _LOG.warning("[%s] Device unreachable but state was ON, correcting to STANDBY", self.name)
             self._teardown_connections(PowerState.STANDBY)
+            # Reconnect right away instead of after the heartbeat interval, in case the
+            # failure was brief and the device is still on.
+            self._reconnect_event.set()
 
             # Re-evaluate based on corrected state and caller intent
             if command == const.CMD_STANDBY:
@@ -316,13 +331,19 @@ class MadVRDevice:
                 return False
 
             _LOG.info("[%s] Listener connected: %s", self.name, welcome)
+            self._unreachable_logged = False
             self._listener_reader = reader
             self._listener_writer = writer
             self._listener_connected.set()
             return True
 
         except Exception as e:
-            _LOG.error("[%s] Listener connection failed: %s", self.name, e)
+            # Normal while the Envy is in standby (its TCP port is closed), so log once per outage.
+            if self._unreachable_logged:
+                _LOG.debug("[%s] Listener connection failed: %s", self.name, e)
+            else:
+                _LOG.warning("[%s] Listener connection failed (device off or unreachable): %s", self.name, e)
+                self._unreachable_logged = True
             await self._disconnect_listener()
             return False
 
@@ -385,7 +406,7 @@ class MadVRDevice:
                     delay = self._get_reconnect_delay()
                     if delay is None:
                         # Backoff exhausted — wait for auto-recovery signal
-                        _LOG.warning("[%s] Backoff exhausted, waiting for auto-recovery", self.name)
+                        _LOG.debug("[%s] Backoff exhausted, waiting for auto-recovery", self.name)
                         await self._interruptible_sleep(const.BACKOFF_DELAYS[-1])
                         continue
 
@@ -549,7 +570,8 @@ class MadVRDevice:
                             return {"success": True}
                         elif response.startswith(const.RESPONSE_ERROR):
                             error_msg = response.replace(const.RESPONSE_ERROR, "").strip().strip('"')
-                            return {"success": False, "error": error_msg}
+                            # The device answered, so it is reachable: not a connection failure.
+                            return {"success": False, "error": error_msg, "device_error": True}
                         elif expected_prefix and response.startswith(expected_prefix):
                             return {"success": True, "data": response}
                         elif self._notification_processor.is_notification(response):
@@ -861,10 +883,11 @@ class MadVRDevice:
         if self._backoff_index < len(const.BACKOFF_DELAYS):
             self._backoff_index += 1
 
-        # If we've exhausted the initial backoff sequence and state is still ON,
-        # the device is unreachable — correct to STANDBY so the UI shows OFF.
-        if self._backoff_index >= len(const.BACKOFF_DELAYS) and self._state == PowerState.ON:
-            _LOG.warning("[%s] Device unreachable after backoff sequence, correcting ON -> STANDBY", self.name)
+        # If we've exhausted the initial backoff sequence and state is still ON (or never
+        # known, e.g. the Envy was in standby when the integration started), the device is
+        # unreachable — correct to STANDBY so the UI shows OFF.
+        if self._backoff_index >= len(const.BACKOFF_DELAYS) and self._state in (PowerState.ON, PowerState.UNKNOWN):
+            _LOG.info("[%s] Device unreachable after backoff sequence, %s -> STANDBY", self.name, self._state.value)
             self._teardown_connections(PowerState.STANDBY)
 
     def _get_reconnect_delay(self) -> float | None:

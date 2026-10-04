@@ -26,7 +26,7 @@ class MadVRRemote(Remote):
         self._config = config
         self._device = device
 
-        entity_id = f"remote.{config.host.replace('.', '_')}"
+        entity_id = f"remote.{config.device_id}"
 
         # Define simple commands for custom button mapping
         simple_commands = self._get_simple_commands()
@@ -73,40 +73,37 @@ class MadVRRemote(Remote):
                 result = await self._device.send_command(const.CMD_STANDBY, power_intent="off")
                 return StatusCodes.OK if result["success"] else StatusCodes.SERVER_ERROR
 
-            elif cmd_id == Commands.SEND_CMD:
-                if not params or "command" not in params:
-                    _LOG.error("send_cmd received without command parameter")
+            elif cmd_id in (Commands.SEND_CMD, Commands.SEND_CMD_SEQUENCE):
+                params = params or {}
+                if cmd_id == Commands.SEND_CMD:
+                    if not params.get("command"):
+                        _LOG.error("send_cmd received without command parameter")
+                        return StatusCodes.BAD_REQUEST
+                    commands = [str(params["command"])]
+                else:
+                    sequence = params.get("sequence")
+                    if isinstance(sequence, str):
+                        sequence = sequence.split(",")
+                    commands = [str(c).strip() for c in sequence or [] if str(c).strip()]
+                    if not commands:
+                        return StatusCodes.BAD_REQUEST
+                try:
+                    repeat = max(1, int(params.get("repeat") or 1))
+                    delay = max(0, int(params.get("delay") or 0)) / 1000
+                except (TypeError, ValueError):
                     return StatusCodes.BAD_REQUEST
 
-                command = params["command"]
+                first = True
+                for command in commands:
+                    for _ in range(repeat):
+                        if not first and delay:
+                            await asyncio.sleep(delay)
+                        first = False
+                        status = await self._send_one(command)
+                        if status != StatusCodes.OK:
+                            return status
+                return StatusCodes.OK
 
-                # Check if this is a simple command name (from custom button mapping)
-                # If so, map it to the actual device protocol command
-                device_command = self._map_simple_command_to_device(command)
-                if device_command:
-                    _LOG.debug(f"Mapped simple command '{command}' to device command '{device_command}'")
-                    command = device_command
-
-                # Standby via send_cmd: if already in standby, device is in desired state
-                if command == const.CMD_STANDBY and self._device.state.value == "STANDBY":
-                    _LOG.info("Device already in standby, command successful")
-                    return StatusCodes.OK
-
-                # Standby when OFF or UNKNOWN: needs WOL (may take a while).
-                # UNKNOWN is treated as OFF because the TCP port is likely closed and
-                # the command would fail anyway. WOL is safe if already on (NIC ignores it).
-                if command == const.CMD_STANDBY and self._device.state.value in ("OFF", "UNKNOWN"):
-                    task = asyncio.create_task(self._device.send_command(command, power_intent="on"))
-                    try:
-                        result = await asyncio.wait_for(task, timeout=3.0)
-                        return StatusCodes.OK if result["success"] else StatusCodes.SERVER_ERROR
-                    except asyncio.TimeoutError:
-                        _LOG.info(f"Command {command} initiated (may involve WOL)")
-                        return StatusCodes.OK
-
-                # Normal command
-                result = await self._device.send_command(command)
-                return StatusCodes.OK if result["success"] else StatusCodes.SERVER_ERROR
             elif cmd_id == Commands.TOGGLE:
                 if self._device.state.value == "ON":
                     # State guard: send_command handles power_intent="off" correctly
@@ -131,6 +128,42 @@ class MadVRRemote(Remote):
         except Exception as e:
             _LOG.error(f"Command failed: {e}", exc_info=True)
             return StatusCodes.SERVER_ERROR
+
+    async def _send_one(self, command: str) -> StatusCodes:
+        """Send one command: a simple command name or a raw madVR protocol command."""
+        # Check if this is a simple command name (from custom button mapping)
+        # If so, map it to the actual device protocol command
+        device_command = self._map_simple_command_to_device(command)
+        if device_command:
+            _LOG.debug(f"Mapped simple command '{command}' to device command '{device_command}'")
+            command = device_command
+
+        # Standby via send_cmd: if already in standby, device is in desired state
+        if command == const.CMD_STANDBY and self._device.state.value == "STANDBY":
+            _LOG.info("Device already in standby, command successful")
+            return StatusCodes.OK
+
+        # Standby when OFF or UNKNOWN: needs WOL (may take a while).
+        # UNKNOWN is treated as OFF because the TCP port is likely closed and
+        # the command would fail anyway. WOL is safe if already on (NIC ignores it).
+        if command == const.CMD_STANDBY and self._device.state.value in ("OFF", "UNKNOWN"):
+            task = asyncio.create_task(self._device.send_command(command, power_intent="on"))
+            try:
+                result = await asyncio.wait_for(task, timeout=3.0)
+                return StatusCodes.OK if result["success"] else StatusCodes.SERVER_ERROR
+            except asyncio.TimeoutError:
+                _LOG.info(f"Command {command} initiated (may involve WOL)")
+                return StatusCodes.OK
+
+        # Normal command
+        result = await self._device.send_command(command)
+        if result["success"]:
+            return StatusCodes.OK
+        if result.get("device_error"):
+            # The Envy rejected it: unknown command, or not available right now.
+            _LOG.warning("Envy rejected command '%s': %s", command, result.get("error"))
+            return StatusCodes.BAD_REQUEST
+        return StatusCodes.SERVICE_UNAVAILABLE
 
     def _get_command_map(self) -> dict[str, str]:
         """Get the complete command mapping dictionary."""

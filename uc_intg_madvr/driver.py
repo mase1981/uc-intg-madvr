@@ -135,6 +135,13 @@ async def _initialize_entities():
     try:
         _LOG.info("Initializing madVR device and entities...")
 
+        # Setup run again (Update): stop the previous device, or its connections and
+        # background loops keep running next to the new one.
+        if _device:
+            _device.events.remove_all_listeners()
+            await _device.stop()
+            _device = None
+
         loop = asyncio.get_running_loop()
         _device = MadVRDevice(_config, loop)
 
@@ -170,6 +177,12 @@ async def _initialize_entities():
             api.available_entities.add(sensor)
 
         api.available_entities.add(_select)
+
+        # Entities the Remote already uses still point at the previous device: replace them.
+        for entity in [_media_player, _remote, *_sensors, _select]:
+            if api.configured_entities.contains(entity.id):
+                api.configured_entities.remove(entity.id)
+                api.configured_entities.add(entity)
 
         await _device.start()
 

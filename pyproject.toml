@@ -47,13 +47,10 @@ test = [
 "Bug Reports" = "https://github.com/mase1981/uc-intg-madvr/issues"
 
 [tool.setuptools]
-packages = ["intg_madvr"]
+packages = ["uc_intg_madvr"]
 
 [tool.setuptools.dynamic]
-version = {attr = "intg_madvr.__version__"}
+version = {attr = "uc_intg_madvr.__version__"}
 
 [tool.setuptools.package-data]
-"intg_madvr" = ["*.json"]
-
-[project.scripts]
-uc-intg-madvr = "intg_madvr.driver:run"
+"uc_intg_madvr" = ["*.json"]

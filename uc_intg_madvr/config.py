@@ -18,15 +18,20 @@ _LOG = logging.getLogger(__name__)
 class MadVRConfig:
     """Configuration manager for madVR Envy integration."""
 
-    def __init__(self, config_dir: str = None):
-        """Initialize configuration manager."""
+    def __init__(self, config_dir: str = None, persist: bool = True):
+        """Initialize configuration manager.
+
+        :param persist: False keeps the configuration in memory only (setup connection test).
+        """
         if config_dir is None:
             config_dir = os.getenv("UC_CONFIG_HOME") or os.getenv("HOME") or "./"
-        
+
         self._config_dir = config_dir
         self._config_file = os.path.join(config_dir, "madvr_config.json")
+        self._persist = persist
         self._config: dict[str, Any] = {}
-        self._load_config()
+        if persist:
+            self._load_config()
 
     def _load_config(self) -> None:
         """Load configuration from disk."""
@@ -49,6 +54,8 @@ class MadVRConfig:
 
     def _save_config(self) -> None:
         """Save configuration to disk."""
+        if not self._persist:
+            return
         try:
             os.makedirs(self._config_dir, exist_ok=True)
             with open(self._config_file, "w", encoding="utf-8") as f:
@@ -68,7 +75,12 @@ class MadVRConfig:
         if name is None:
             name = "madVR Envy"
 
+        # The device ID names the entities. It is kept when the IP address changes, so
+        # activities and button mappings keep working. Configs from before it existed
+        # used the IP address, so that is what it starts as.
+        device_id = self._config.get("device_id") or (self._config.get("host") or host).replace(".", "_")
         self._config = {
+            "device_id": device_id,
             "host": host,
             "port": port,
             "name": name,
@@ -95,6 +107,11 @@ class MadVRConfig:
     def host(self) -> str | None:
         """Get configured host."""
         return self._config.get("host")
+
+    @property
+    def device_id(self) -> str:
+        """Get the device ID used in entity IDs (stays the same when the IP address changes)."""
+        return self._config.get("device_id") or (self._config.get("host") or "").replace(".", "_")
 
     @property
     def port(self) -> int:
